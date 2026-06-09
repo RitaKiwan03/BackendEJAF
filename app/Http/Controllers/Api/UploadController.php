@@ -7,17 +7,12 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
 use enshrined\svgSanitize\Sanitizer;
+use CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary;
 
 class UploadController extends Controller
 {
-    /**
-     * الامتدادات المسموحة
-     */
     private const ALLOWED_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'];
 
-    /**
-     * MIME Types المسموحة
-     */
     private const ALLOWED_MIMES = [
         'image/jpeg',
         'image/png',
@@ -26,10 +21,6 @@ class UploadController extends Controller
         'image/svg+xml',
     ];
 
-    /**
-     * POST /api/upload — Protected (auth:sanctum)
-     * رفع الصور مع حماية كاملة لجميع الصيغ
-     */
     public function upload(Request $request)
     {
         $file = $request->file('file');
@@ -38,7 +29,6 @@ class UploadController extends Controller
             return response()->json(['error' => 'لم يتم إرسال ملف'], 422);
         }
 
-        // ✅ 1. التحقق من الامتداد
         $extension = strtolower($file->getClientOriginalExtension());
 
         if (!in_array($extension, self::ALLOWED_EXTENSIONS)) {
@@ -48,44 +38,39 @@ class UploadController extends Controller
             ], 422);
         }
 
-        // ✅ 2. التحقق من MIME الحقيقي
         $realMime = $file->getMimeType();
 
         if (!in_array($realMime, self::ALLOWED_MIMES)) {
-            return response()->json([
-                'error' => 'نوع الملف الحقيقي غير مسموح'
-            ], 422);
+            return response()->json(['error' => 'نوع الملف الحقيقي غير مسموح'], 422);
         }
 
-        // ✅ 3. التحقق من الحجم (5MB كحد أقصى)
         if ($file->getSize() > 5 * 1024 * 1024) {
-            return response()->json([
-                'error' => 'حجم الملف كبير جداً (الحد الأقصى 5MB)'
-            ], 422);
+            return response()->json(['error' => 'حجم الملف كبير جداً (الحد الأقصى 5MB)'], 422);
         }
 
-        // ✅ 4. اسم عشوائي آمن
-        $randomName = Str::uuid() . '.' . $extension;
-
-        // ✅ 5. معالجة SVG بشكل خاص — تعقيم كامل
+        // ✅ SVG - تعقيم ثم رفع على Cloudinary
         if ($extension === 'svg') {
-            return $this->handleSvg($file, $randomName);
+            return $this->handleSvg($file);
         }
 
-        // ✅ 6. باقي الصور (jpg, png, gif, webp) — حفظ مباشر
-        $path = $file->storeAs('uploads', $randomName, 'public');
+        // ✅ باقي الصور - رفع مباشر على Cloudinary
+        try {
+            $result = Cloudinary::upload($file->getRealPath(), [
+                'folder' => 'ejaf/uploads',
+                'public_id' => Str::uuid(),
+            ]);
 
-        return response()->json([
-            'url'  => '/storage/' . $path,
-            'name' => $file->getClientOriginalName(),
-            'size' => $file->getSize(),
-        ]);
+            return response()->json([
+                'url'  => $result->getSecurePath(),
+                'name' => $file->getClientOriginalName(),
+                'size' => $file->getSize(),
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'فشل رفع الصورة: ' . $e->getMessage()], 500);
+        }
     }
 
-    /**
-     * معالجة SVG بأمان كامل باستخدام مكتبة enshrined/svg-sanitize
-     */
-    private function handleSvg($file, string $randomName)
+    private function handleSvg($file)
     {
         $svgContent = file_get_contents($file->getRealPath());
 
@@ -93,24 +78,34 @@ class UploadController extends Controller
             return response()->json(['error' => 'فشل قراءة الملف'], 422);
         }
 
-        // ✅ تعقيم SVG — يحذف script و event handlers و javascript: تلقائياً
         $sanitizer = new Sanitizer();
         $cleanSvg  = $sanitizer->sanitize($svgContent);
 
         if ($cleanSvg === false || empty(trim($cleanSvg))) {
-            return response()->json([
-                'error' => 'الملف يحتوي على محتوى غير مسموح'
-            ], 422);
+            return response()->json(['error' => 'الملف يحتوي على محتوى غير مسموح'], 422);
         }
 
-        // ✅ حفظ الـ SVG المنظف
-        $path = 'uploads/' . $randomName;
-        Storage::disk('public')->put($path, $cleanSvg);
+        // ✅ حفظ SVG مؤقتاً ثم رفعه على Cloudinary
+        $tmpPath = tempnam(sys_get_temp_dir(), 'svg_') . '.svg';
+        file_put_contents($tmpPath, $cleanSvg);
 
-        return response()->json([
-            'url'  => '/storage/' . $path,
-            'name' => $randomName,
-            'size' => strlen($cleanSvg),
-        ]);
+        try {
+            $result = Cloudinary::upload($tmpPath, [
+                'folder'     => 'ejaf/uploads',
+                'public_id'  => Str::uuid(),
+                'resource_type' => 'image',
+            ]);
+
+            unlink($tmpPath);
+
+            return response()->json([
+                'url'  => $result->getSecurePath(),
+                'name' => 'image.svg',
+                'size' => strlen($cleanSvg),
+            ]);
+        } catch (\Exception $e) {
+            unlink($tmpPath);
+            return response()->json(['error' => 'فشل رفع SVG: ' . $e->getMessage()], 500);
+        }
     }
 }
