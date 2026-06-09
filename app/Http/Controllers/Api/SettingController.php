@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Cache;
 use enshrined\svgSanitize\Sanitizer;
 use CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary;
 
+
 class SettingController extends Controller
 {
     private const PUBLIC_KEYS   = ['phone', 'email', 'logo_url', 'favicon_url'];
