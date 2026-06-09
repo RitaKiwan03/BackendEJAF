@@ -73,6 +73,23 @@ Route::post('/visitors/track', [VisitorController::class, 'track'])
 // ── Search — public ───────────────────────────────────────
 Route::get('/search', [PostController::class, 'search']);
 
+Route::get('/admin/projects', function () {
+    return response()->json(
+        \App\Models\Project::latest()->get()
+    );
+});
+
+Route::get('/admin/blog', function () {
+    return response()->json(
+        \App\Models\Post::latest('created_at_display')->get()
+    );
+});
+Route::get('/admin/services', function () {
+    return response()->json(
+        \App\Models\Service::orderBy('order')->get()
+    );
+});
+
 // ============================================================
 // PROTECTED ROUTES — تحتاج توكن أدمن (auth:sanctum)
 // ============================================================
@@ -91,31 +108,19 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // ── Services (Admin CRUD) ─────────────────────────────
     // جلب كل الحقول للداشبورد
-    Route::get('/admin/services', function () {
-        return response()->json(
-            \App\Models\Service::orderBy('order')->get()
-        );
-    });
+
     Route::post('/services',         [ServiceController::class, 'store']);
     Route::put('/services/{id}',     [ServiceController::class, 'update']);
     Route::delete('/services/{id}',  [ServiceController::class, 'destroy']);
 
     // ── Projects (Admin CRUD) ─────────────────────────────
-    Route::get('/admin/projects', function () {
-        return response()->json(
-            \App\Models\Project::latest()->get()
-        );
-    });
+
     Route::post('/projects',         [ProjectController::class, 'store']);
     Route::put('/projects/{id}',     [ProjectController::class, 'update']);
     Route::delete('/projects/{id}',  [ProjectController::class, 'destroy']);
 
     // ── Blog (Admin CRUD) ─────────────────────────────────
-    Route::get('/admin/blog', function () {
-        return response()->json(
-            \App\Models\Post::latest('created_at_display')->get()
-        );
-    });
+
     Route::post('/blog',             [PostController::class, 'store']);
     Route::put('/blog/{id}',         [PostController::class, 'update']);
     Route::delete('/blog/{id}',      [PostController::class, 'destroy']);
