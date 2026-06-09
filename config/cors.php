@@ -17,13 +17,8 @@ return [
     |--------------------------------------------------------------------------
     */
     'allowed_origins' => [
-        // Development
+        'https://frontend-ejaf-oiz4.vercel.app',
         'http://localhost:3000',
-        'http://127.0.0.1:3000',
-
-        // Production ← ضع دومينك الحقيقي هنا
-        'https://your-domain.com',
-        'https://www.your-domain.com',
     ],
 
     'allowed_origins_patterns' => [],
