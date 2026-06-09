@@ -19,6 +19,7 @@ return [
     'allowed_origins' => [
         'https://frontend-ejaf-oiz4.vercel.app',
         'http://localhost:3000',
+        'http://localhost:3001',
     ],
 
     'allowed_origins_patterns' => [],
