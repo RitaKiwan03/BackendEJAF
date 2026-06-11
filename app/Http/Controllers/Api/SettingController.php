@@ -10,7 +10,7 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Cache;
 use enshrined\svgSanitize\Sanitizer;
-use CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary;
+use Cloudinary\Cloudinary;
 
 
 class SettingController extends Controller
@@ -69,6 +69,8 @@ class SettingController extends Controller
             return response()->json(['error' => 'نوع الملف غير مسموح'], 422);
         }
 
+        $cloudinary = new Cloudinary(config('cloudinary.cloud_url'));
+
         // ✅ SVG - تعقيم
         if ($extension === 'svg') {
             $svgContent = file_get_contents($file->getRealPath());
@@ -82,15 +84,12 @@ class SettingController extends Controller
             $tmpPath = tempnam(sys_get_temp_dir(), 'svg_') . '.svg';
             file_put_contents($tmpPath, $cleanSvg);
 
-            $result = Cloudinary::upload($tmpPath, ['folder' => 'ejaf/logo']);
+            $result = $cloudinary->uploadApi()->upload($tmpPath, ['folder' => 'ejaf/logo', 'resource_type' => 'image']);
             unlink($tmpPath);
-            $url = $result->getSecurePath();
+            $url = $result['secure_url'];
         } else {
-            // ✅ باقي الصيغ
-            $result = Cloudinary::upload($file->getRealPath(), [
-                'folder' => 'ejaf/logo',
-            ]);
-            $url = $result->getSecurePath();
+            $result = $cloudinary->uploadApi()->upload($file->getRealPath(), ['folder' => 'ejaf/logo']);
+            $url = $result['secure_url'];
         }
 
         Setting::set('logo_url', $url);
@@ -124,11 +123,10 @@ class SettingController extends Controller
             return response()->json(['error' => 'صيغة غير مسموحة للـ favicon'], 422);
         }
 
-        $result = Cloudinary::upload($file->getRealPath(), [
-            'folder' => 'ejaf/favicon',
-        ]);
+        $cloudinary = new Cloudinary(config('cloudinary.cloud_url'));
+        $result = $cloudinary->uploadApi()->upload($file->getRealPath(), ['folder' => 'ejaf/favicon']);
+        $url = $result['secure_url'];
 
-        $url = $result->getSecurePath();
         Setting::set('favicon_url', $url);
         $this->clearCache();
 
