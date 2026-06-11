@@ -42,6 +42,7 @@ Route::get('/locations', [LocationController::class, 'index']);
 Route::post('/visitors/track', [VisitorController::class, 'track'])
     ->middleware('throttle:30,1');
 Route::get('/search', [PostController::class, 'search']);
+Route::get('/settings', [SettingController::class, 'index']);
 // ============================================================
 // PROTECTED ROUTES — تحتاج توكن أدمن (auth:sanctum)
 // ============================================================
@@ -107,7 +108,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/settings',             [SettingController::class, 'update']);
     Route::post('/settings/logo',       [SettingController::class, 'uploadLogo']);
     Route::post('/settings/favicon',    [SettingController::class, 'uploadFavicon']);
-    Route::get('/settings', [SettingController::class, 'index']);
     Route::get('/settings/logo', function () {
         try {
             $setting = \App\Models\Setting::where('key', 'logo')->first();
