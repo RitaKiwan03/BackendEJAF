@@ -11,6 +11,8 @@ use App\Http\Controllers\Api\LocationController;
 use App\Http\Controllers\Api\SettingController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\TeamController;
+
 
 // ============================================================
 // Health Check — للتأكد أن السيرفر يعمل
@@ -43,6 +45,8 @@ Route::post('/visitors/track', [VisitorController::class, 'track'])
     ->middleware('throttle:30,1');
 Route::get('/search', [PostController::class, 'search']);
 Route::get('/settings', [SettingController::class, 'index']);
+Route::get('/team', [TeamController::class, 'index']);
+
 // ============================================================
 // PROTECTED ROUTES — تحتاج توكن أدمن (auth:sanctum)
 // ============================================================
@@ -118,4 +122,8 @@ Route::middleware('auth:sanctum')->group(function () {
             return response()->json(['url' => null]);
         }
     });
+
+    Route::post('/team', [TeamController::class, 'store']);
+    Route::put('/team/{id}', [TeamController::class, 'update']);
+    Route::delete('/team/{id}', [TeamController::class, 'destroy']);
 });
