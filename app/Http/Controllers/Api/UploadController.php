@@ -7,7 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Storage;
 use enshrined\svgSanitize\Sanitizer;
-use CloudinaryLabs\CloudinaryLaravel\Facades\Cloudinary;
+use Cloudinary\Cloudinary;
 
 class UploadController extends Controller
 {
@@ -55,13 +55,14 @@ class UploadController extends Controller
 
         // ✅ باقي الصور - رفع مباشر على Cloudinary
         try {
-            $result = Cloudinary::upload($file->getRealPath(), [
+            $cloudinary = new Cloudinary(config('cloudinary.cloud_url'));
+            $result = $cloudinary->uploadApi()->upload($file->getRealPath(), [
                 'folder' => 'ejaf/uploads',
                 'public_id' => Str::uuid(),
             ]);
 
             return response()->json([
-                'url'  => $result->getSecurePath(),
+                'url'  => $result['secure_url'],
                 'name' => $file->getClientOriginalName(),
                 'size' => $file->getSize(),
             ]);
@@ -90,16 +91,17 @@ class UploadController extends Controller
         file_put_contents($tmpPath, $cleanSvg);
 
         try {
-            $result = Cloudinary::upload($tmpPath, [
-                'folder'     => 'ejaf/uploads',
-                'public_id'  => Str::uuid(),
+            $cloudinary = new Cloudinary(config('cloudinary.cloud_url'));
+            $result = $cloudinary->uploadApi()->upload($tmpPath, [
+                'folder'        => 'ejaf/uploads',
+                'public_id'     => Str::uuid(),
                 'resource_type' => 'image',
             ]);
 
             unlink($tmpPath);
 
             return response()->json([
-                'url'  => $result->getSecurePath(),
+                'url'  => $result['secure_url'],
                 'name' => 'image.svg',
                 'size' => strlen($cleanSvg),
             ]);
