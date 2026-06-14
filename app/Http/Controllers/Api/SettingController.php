@@ -7,19 +7,28 @@ use App\Models\Setting;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Cache;
 use enshrined\svgSanitize\Sanitizer;
 use Cloudinary\Cloudinary;
 
-
 class SettingController extends Controller
 {
-    private const PUBLIC_KEYS   = ['phone', 'email', 'logo_url', 'favicon_url'];
+    private const PUBLIC_KEYS = [
+        'phone',
+        'email',
+        'logo_url',
+        'favicon_url',
+        'facebook',
+        'instagram',
+        'twitter',
+        'linkedin',
+        'whatsapp',
+        'youtube',
+        'tiktok',
+    ];
     private const CACHE_KEY     = 'public_settings';
     private const CACHE_SECONDS = 3600;
 
-    // GET /api/settings — Public
     public function index(): JsonResponse
     {
         $settings = Cache::remember(self::CACHE_KEY, self::CACHE_SECONDS, function () {
@@ -31,12 +40,18 @@ class SettingController extends Controller
         return response()->json($settings);
     }
 
-    // PUT /api/settings — Protected
     public function update(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'phone' => 'nullable|string|max:50',
-            'email' => 'nullable|string|email|max:255',
+            'phone'     => 'nullable|string|max:50',
+            'email'     => 'nullable|string|email|max:255',
+            'facebook'  => 'nullable|url|max:255',
+            'instagram' => 'nullable|url|max:255',
+            'twitter'   => 'nullable|url|max:255',
+            'linkedin'  => 'nullable|url|max:255',
+            'whatsapp'  => 'nullable|string|max:255',
+            'youtube'   => 'nullable|url|max:255',
+            'tiktok'    => 'nullable|url|max:255',
         ]);
 
         foreach ($validated as $key => $value) {
@@ -49,7 +64,6 @@ class SettingController extends Controller
         return response()->json(['message' => 'تم تحديث الإعدادات بنجاح']);
     }
 
-    // POST /api/settings/logo — Protected
     public function uploadLogo(Request $request): JsonResponse
     {
         $request->validate(['logo' => 'required|file|max:5120']);
@@ -71,10 +85,9 @@ class SettingController extends Controller
 
         $cloudinary = new Cloudinary(config('cloudinary.cloud_url'));
 
-        // ✅ SVG - تعقيم
         if ($extension === 'svg') {
             $svgContent = file_get_contents($file->getRealPath());
-            $sanitizer  = new \enshrined\svgSanitize\Sanitizer();
+            $sanitizer  = new Sanitizer();
             $cleanSvg   = $sanitizer->sanitize($svgContent);
 
             if (!$cleanSvg) {
@@ -83,18 +96,16 @@ class SettingController extends Controller
 
             $tmpPath = tempnam(sys_get_temp_dir(), 'svg_') . '.svg';
             file_put_contents($tmpPath, $cleanSvg);
-
             $result = $cloudinary->uploadApi()->upload($tmpPath, ['folder' => 'ejaf/logo', 'resource_type' => 'image']);
             unlink($tmpPath);
             $url = $result['secure_url'];
         } else {
             $result = $cloudinary->uploadApi()->upload($file->getRealPath(), ['folder' => 'ejaf/logo']);
-            $url = $result['secure_url'];
+            $url    = $result['secure_url'];
         }
 
         Setting::set('logo_url', $url);
 
-        // ✅ إذا ليس GIF - احفظ كـ favicon
         $faviconUrl = null;
         if ($extension !== 'gif') {
             Setting::set('favicon_url', $url);
@@ -103,29 +114,23 @@ class SettingController extends Controller
 
         $this->clearCache();
 
-        return response()->json([
-            'url'         => $url,
-            'favicon_url' => $faviconUrl,
-        ]);
+        return response()->json(['url' => $url, 'favicon_url' => $faviconUrl]);
     }
 
-
-    // POST /api/settings/favicon — Protected
     public function uploadFavicon(Request $request): JsonResponse
     {
         $request->validate(['favicon' => 'required|file|max:1024']);
 
         $file      = $request->file('favicon');
         $extension = strtolower($file->getClientOriginalExtension());
-        $allowedExtensions = ['png', 'jpg', 'jpeg', 'svg', 'ico'];
 
-        if (!in_array($extension, $allowedExtensions)) {
+        if (!in_array($extension, ['png', 'jpg', 'jpeg', 'svg', 'ico'])) {
             return response()->json(['error' => 'صيغة غير مسموحة للـ favicon'], 422);
         }
 
         $cloudinary = new Cloudinary(config('cloudinary.cloud_url'));
-        $result = $cloudinary->uploadApi()->upload($file->getRealPath(), ['folder' => 'ejaf/favicon']);
-        $url = $result['secure_url'];
+        $result     = $cloudinary->uploadApi()->upload($file->getRealPath(), ['folder' => 'ejaf/favicon']);
+        $url        = $result['secure_url'];
 
         Setting::set('favicon_url', $url);
         $this->clearCache();
