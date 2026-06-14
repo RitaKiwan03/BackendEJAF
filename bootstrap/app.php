@@ -9,6 +9,8 @@ use Illuminate\Validation\ValidationException;
 use Illuminate\Http\Middleware\HandleCors;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException;
+use App\Http\Middleware\SecurityHeaders;
+use App\Http\Middleware\VerifyOrigin;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -18,44 +20,60 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
-        // ✅ CORS أولاً
         $middleware->prepend(HandleCors::class);
 
-        // ✅ Security Headers على كل الـ responses
-        $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
+        // ✅ Security headers على كل الردود (API + Web)
+        $middleware->append(SecurityHeaders::class);
 
-        // ✅ Rate limiting للـ API
-        $middleware->throttleApi();
+        // ✅ حماية CSRF-equivalent: تحقق من Origin لطلبات POST/PUT/PATCH/DELETE
+        // على كل مسارات /api/* — يضاف لمجموعة 'api' فقط
+        $middleware->appendToGroup('api', VerifyOrigin::class);
     })
     ->withExceptions(function (Exceptions $exceptions) {
 
+        // ✅ 1. غير مصادق (بدون توكن أو توكن منتهي) → 401 دائماً
         $exceptions->render(function (AuthenticationException $e, $request) {
             if ($request->is('api/*')) {
-                return response()->json(['message' => 'غير مصرح — يرجى تسجيل الدخول أولاً'], 401);
+                return response()->json([
+                    'message' => 'غير مصرح — يرجى تسجيل الدخول أولاً'
+                ], 401);
             }
         });
 
+        // ✅ 2. سجل غير موجود (findOrFail فشل)
         $exceptions->render(function (ModelNotFoundException $e, $request) {
             if ($request->is('api/*')) {
-                return response()->json(['message' => 'العنصر المطلوب غير موجود'], 404);
+                return response()->json([
+                    'message' => 'العنصر المطلوب غير موجود'
+                ], 404);
             }
         });
 
+        // ✅ 3. مسار غير موجود
         $exceptions->render(function (NotFoundHttpException $e, $request) {
             if ($request->is('api/*')) {
-                return response()->json(['message' => 'المسار غير موجود'], 404);
+                return response()->json([
+                    'message' => 'المسار غير موجود'
+                ], 404);
             }
         });
 
+        // ✅ 4. Validation فشل
         $exceptions->render(function (ValidationException $e, $request) {
             if ($request->is('api/*')) {
-                return response()->json(['message' => 'بيانات غير صحيحة', 'errors' => $e->errors()], 422);
+                return response()->json([
+                    'message' => 'بيانات غير صحيحة',
+                    'errors'  => $e->errors(),
+                ], 422);
             }
         });
 
+        // ✅ 5. Method غير مسموح
         $exceptions->render(function (MethodNotAllowedHttpException $e, $request) {
             if ($request->is('api/*')) {
-                return response()->json(['message' => 'الطريقة غير مسموحة'], 405);
+                return response()->json([
+                    'message' => 'الطريقة غير مسموحة لهذا المسار'
+                ], 405);
             }
         });
     })->create();

@@ -9,12 +9,13 @@ use App\Http\Controllers\Api\UploadController;
 use App\Http\Controllers\Api\VisitorController;
 use App\Http\Controllers\Api\LocationController;
 use App\Http\Controllers\Api\SettingController;
-use App\Http\Controllers\Api\TeamController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\TeamController;
+
 
 // ============================================================
-// Health Check
+// Health Check — للتأكد أن السيرفر يعمل
 // ============================================================
 Route::get('/health', function () {
     return response()->json([
@@ -25,42 +26,38 @@ Route::get('/health', function () {
 });
 
 // ============================================================
-// PUBLIC ROUTES
+// PUBLIC ROUTES — لا تحتاج توكن
 // ============================================================
 
-// ✅ CAPTCHA endpoint — يجب أن يكون قبل login
-Route::get('/auth/captcha', [AuthController::class, 'getCaptcha'])
-    ->middleware('throttle:10,1');
+// ── Auth ──────────────────────────────────────────────────
+// ✅ CAPTCHA يُولَّد على السيرفر — Rate limited لمنع توليد آلاف الأسئلة
+Route::get('/auth/captcha', [AuthController::class, 'captcha'])
+    ->middleware('throttle:20,1');
 
-// ✅ Login — 5 محاولات كل دقيقة
 Route::post('/auth/login', [AuthController::class, 'login'])
-    ->middleware('throttle:5,1');
+    ->middleware('throttle:5,1'); // 5 محاولات كل دقيقة لكل IP
 
-Route::get('/services',    [ServiceController::class, 'index'])->middleware('throttle:60,1');
-Route::get('/projects',    [ProjectController::class, 'index'])->middleware('throttle:60,1');
-Route::get('/blog',        [PostController::class, 'index'])->middleware('throttle:60,1');
-Route::get('/blog/search', [PostController::class, 'search'])->middleware('throttle:30,1');
+Route::get('/services', [ServiceController::class, 'index']);
+Route::get('/projects', [ProjectController::class, 'index']);
+Route::get('/blog',        [PostController::class, 'index']);
+Route::get('/blog/search', [PostController::class, 'search']);
 Route::get('/blog/{slug}', [PostController::class, 'show'])
-    ->where('slug', '[a-z0-9-]+')
-    ->middleware('throttle:60,1');
-
-// ✅ Contact — 3 رسائل كل 10 دقائق
+    ->where('slug', '[a-z0-9-]+');
 Route::post('/contact', [ContactController::class, 'store'])
-    ->middleware('throttle:3,10');
-
-Route::get('/locations',  [LocationController::class, 'index'])->middleware('throttle:60,1');
-Route::get('/settings',   [SettingController::class, 'index'])->middleware('throttle:60,1');
-Route::get('/team',       [TeamController::class, 'index'])->middleware('throttle:60,1');
-Route::get('/search',     [PostController::class, 'search'])->middleware('throttle:30,1');
-
-// ✅ Visitor tracking — 30 requests per minute
+    ->middleware('throttle:3,10'); // 3 رسائل كل 10 دقائق
+Route::get('/locations', [LocationController::class, 'index']);
 Route::post('/visitors/track', [VisitorController::class, 'track'])
     ->middleware('throttle:30,1');
+Route::get('/search', [PostController::class, 'search']);
+Route::get('/settings', [SettingController::class, 'index']);
+Route::get('/team', [TeamController::class, 'index']);
 
 // ============================================================
-// PROTECTED ROUTES — auth:sanctum مطلوب
+// PROTECTED ROUTES — تحتاج توكن أدمن (auth:sanctum)
+// ✅ أي طلب بدون توكن صالح → 401 (معالج عام في bootstrap/app.php)
 // ============================================================
-Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
+Route::middleware('auth:sanctum')->group(function () {
+
     // ── Auth ──────────────────────────────────────────────
     Route::post('/auth/logout',          [AuthController::class, 'logout']);
     Route::get('/auth/me',               [AuthController::class, 'me']);
@@ -72,50 +69,63 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
     // ── Visitors Stats ────────────────────────────────────
     Route::get('/visitors/stats', [VisitorController::class, 'stats']);
 
-    // ─ Services ─────────────────────────────────────────
-    Route::get('/admin/services', fn() => response()->json(
-        \App\Models\Service::orderBy('order')->get()
-    ));
-    Route::post('/services',        [ServiceController::class, 'store']);
-    Route::put('/services/{id}',    [ServiceController::class, 'update']);
-    Route::delete('/services/{id}', [ServiceController::class, 'destroy']);
+    // ── Services (Admin CRUD) ─────────────────────────────
+    Route::post('/services',         [ServiceController::class, 'store']);
+    Route::put('/services/{id}',     [ServiceController::class, 'update']);
+    Route::delete('/services/{id}',  [ServiceController::class, 'destroy']);
+    Route::get('/admin/services', function () {
+        return response()->json(
+            \App\Models\Service::orderBy('order')->get()
+        );
+    });
 
-    // ── Projects ────────────────────────────────────────
-    Route::get('/admin/projects', fn() => response()->json(
-        \App\Models\Project::latest()->get()
-    ));
-    Route::post('/projects',        [ProjectController::class, 'store']);
-    Route::put('/projects/{id}',    [ProjectController::class, 'update']);
-    Route::delete('/projects/{id}', [ProjectController::class, 'destroy']);
 
-    // ── Blog ────────────────────────────────────────────
-    Route::get('/admin/blog', fn() => response()->json(
-        \App\Models\Post::latest('created_at_display')->get()
-    ));
-    Route::post('/blog',        [PostController::class, 'store']);
-    Route::put('/blog/{id}',    [PostController::class, 'update']);
-    Route::delete('/blog/{id}', [PostController::class, 'destroy']);
+    // ── Projects (Admin CRUD) ─────────────────────────────
+    Route::post('/projects',         [ProjectController::class, 'store']);
+    Route::put('/projects/{id}',     [ProjectController::class, 'update']);
+    Route::delete('/projects/{id}',  [ProjectController::class, 'destroy']);
+    Route::get('/admin/projects', function () {
+        return response()->json(
+            \App\Models\Project::latest()->get()
+        );
+    });
 
-    // ── Contact Messages ─────────────────────────────────
+    // ── Blog (Admin CRUD) ─────────────────────────────────
+    Route::post('/blog',             [PostController::class, 'store']);
+    Route::put('/blog/{id}',         [PostController::class, 'update']);
+    Route::delete('/blog/{id}',      [PostController::class, 'destroy']);
+    Route::get('/admin/blog', function () {
+        return response()->json(
+            \App\Models\Post::latest('created_at_display')->get()
+        );
+    });
+
+    // ── Contact Messages (Admin) ──────────────────────────
     Route::get('/contact',              [ContactController::class, 'index']);
     Route::put('/contact/{id}/read',    [ContactController::class, 'markRead']);
     Route::delete('/contact/{id}',      [ContactController::class, 'destroy']);
 
-    // ── Locations ─────────────────────────────────────────
-    Route::post('/locations',        [LocationController::class, 'store']);
-    Route::put('/locations/{id}',    [LocationController::class, 'update']);
-    Route::delete('/locations/{id}', [LocationController::class, 'destroy']);
+    // ── Locations (Admin CRUD) ────────────────────────────
+    Route::post('/locations',           [LocationController::class, 'store']);
+    Route::put('/locations/{id}',       [LocationController::class, 'update']);
+    Route::delete('/locations/{id}',    [LocationController::class, 'destroy']);
 
-    // ── Settings ──────────────────────────────────────────
-    Route::put('/settings',          [SettingController::class, 'update']);
-    Route::post('/settings/logo',    [SettingController::class, 'uploadLogo']);
-    Route::post('/settings/favicon', [SettingController::class, 'uploadFavicon']);
-    Route::get('/settings/logo', fn() => response()->json([
-        'url' => \App\Models\Setting::where('key', 'logo')->first()?->value,
-    ]));
+    // ── Settings (Admin) ──────────────────────────────────
+    Route::put('/settings',             [SettingController::class, 'update']);
+    Route::post('/settings/logo',       [SettingController::class, 'uploadLogo']);
+    Route::post('/settings/favicon',    [SettingController::class, 'uploadFavicon']);
+    Route::get('/settings/logo', function () {
+        try {
+            $setting = \App\Models\Setting::where('key', 'logo')->first();
+            return response()->json([
+                'url' => $setting?->value ?? null,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['url' => null]);
+        }
+    });
 
-    // ── Team ──────────────────────────────────────────────
-    Route::post('/team',        [TeamController::class, 'store']);
-    Route::put('/team/{id}',    [TeamController::class, 'update']);
+    Route::post('/team', [TeamController::class, 'store']);
+    Route::put('/team/{id}', [TeamController::class, 'update']);
     Route::delete('/team/{id}', [TeamController::class, 'destroy']);
 });
