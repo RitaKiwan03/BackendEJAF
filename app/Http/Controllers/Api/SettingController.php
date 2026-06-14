@@ -55,9 +55,11 @@ class SettingController extends Controller
         ]);
 
         foreach ($validated as $key => $value) {
-            if ($value !== null) {
-                Setting::set($key, $value);
-            }
+            // ✅ حفظ القيمة حتى لو كانت فارغة
+            Setting::updateOrCreate(
+                ['key' => $key],
+                ['value' => $value ?? '']
+            );
         }
 
         $this->clearCache();
