@@ -30,13 +30,7 @@ return [
     | ✅ محددة بدل * لأمان أفضل
     |--------------------------------------------------------------------------
     */
-    'allowed_headers' => [
-        'Content-Type',
-        'Authorization',
-        'Accept',
-        'X-Requested-With',
-    ],
-
+    'allowed_headers' => ['*'],
     'exposed_headers' => [],
 
     // ✅ Cache لـ preflight requests لمدة ساعة — يحسن الأداء
