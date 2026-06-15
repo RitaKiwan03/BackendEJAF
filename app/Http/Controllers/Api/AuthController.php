@@ -13,24 +13,17 @@ class AuthController extends Controller
 {
     private const CAPTCHA_TTL_MINUTES = 5;
 
-    /**
-     * ✅ يرجع الرسالة المناسبة حسب لغة الطلب (Accept-Language header)
-     * الافتراضي عربي إذا لم يُرسَل الـ header أو كانت قيمته غير en
-     */
     private function msg(Request $request, string $ar, string $en): string
     {
         $lang = strtolower((string) $request->header('Accept-Language', 'ar'));
         return str_starts_with($lang, 'en') ? $en : $ar;
     }
 
-    /**
-     * GET /api/auth/captcha — Public
-     */
+    // GET /api/auth/captcha — Public
     public function captcha(Request $request)
     {
-        $a = random_int(1, 9);
-        $b = random_int(1, 9);
-
+        $a  = random_int(1, 9);
+        $b  = random_int(1, 9);
         $ops = ['+', '-', '*'];
         $op  = $ops[array_rand($ops)];
 
@@ -41,7 +34,6 @@ class AuthController extends Controller
         };
 
         $id = (string) Str::uuid();
-
         Cache::put("captcha:{$id}", $answer, now()->addMinutes(self::CAPTCHA_TTL_MINUTES));
 
         return response()->json([
@@ -50,9 +42,7 @@ class AuthController extends Controller
         ]);
     }
 
-    /**
-     * POST /api/auth/login — Public
-     */
+    // POST /api/auth/login — Public
     public function login(Request $request)
     {
         $request->validate([
@@ -62,6 +52,7 @@ class AuthController extends Controller
             'captcha_answer' => 'required|numeric',
         ]);
 
+        // ✅ التحقق من CAPTCHA أولاً
         $expected = Cache::pull("captcha:{$request->captcha_id}");
 
         if ($expected === null || (int) $request->captcha_answer !== (int) $expected) {
@@ -74,6 +65,7 @@ class AuthController extends Controller
             ], 422);
         }
 
+        // ✅ التحقق من المستخدم
         $user = User::where('username', $request->username)->first();
 
         if (!$user || !Hash::check($request->password, $user->password)) {
@@ -86,7 +78,8 @@ class AuthController extends Controller
             ], 401);
         }
 
-        if (!$user->is_admin) {
+        // ✅ فقط admin و moderator يستطيعان الدخول
+        if (!in_array($user->role, ['admin', 'moderator'])) {
             return response()->json([
                 'message' => $this->msg(
                     $request,
@@ -96,8 +89,8 @@ class AuthController extends Controller
             ], 403);
         }
 
+        // ✅ احذف التوكنات القديمة وأنشئ جديدة
         $user->tokens()->delete();
-
         $token = $user->createToken('admin-token')->plainTextToken;
 
         return response()->json([
@@ -106,16 +99,50 @@ class AuthController extends Controller
                 'id'       => $user->id,
                 'name'     => $user->name,
                 'username' => $user->username,
-                'is_admin' => $user->is_admin,
+                'role'     => $user->role,
+                'is_admin' => $user->role === 'admin',
             ]
         ]);
     }
 
-    /**
-     * POST /api/auth/change-password — Protected (auth:sanctum)
-     */
+    // POST /api/auth/logout — Protected
+    public function logout(Request $request)
+    {
+        $request->user()->currentAccessToken()->delete();
+
+        return response()->json([
+            'message' => $this->msg($request, 'تم تسجيل الخروج بنجاح', 'Logged out successfully')
+        ]);
+    }
+
+    // GET /api/auth/me — Protected
+    public function me(Request $request)
+    {
+        $user = $request->user();
+
+        return response()->json([
+            'id'       => $user->id,
+            'name'     => $user->name,
+            'username' => $user->username,
+            'role'     => $user->role,
+            'is_admin' => $user->role === 'admin',
+        ]);
+    }
+
+    // POST /api/auth/change-password — Protected (Admin only)
     public function changePassword(Request $request)
     {
+        // ✅ فقط الأدمن يستطيع تغيير كلمة مروره
+        if ($request->user()->role !== 'admin') {
+            return response()->json([
+                'message' => $this->msg(
+                    $request,
+                    'المشرف لا يستطيع تغيير كلمة المرور',
+                    'Moderator cannot change password'
+                )
+            ], 403);
+        }
+
         $request->validate([
             'current_password' => 'required|string',
             'new_password'     => 'required|string|min:8|max:255|confirmed',
@@ -137,49 +164,84 @@ class AuthController extends Controller
             return response()->json([
                 'message' => $this->msg(
                     $request,
-                    'كلمة المرور الجديدة يجب أن تكون مختلفة عن الحالية',
-                    'New password must be different from the current one'
+                    'كلمة المرور الجديدة يجب أن تكون مختلفة',
+                    'New password must be different'
                 )
             ], 422);
         }
 
         $user->update(['password' => Hash::make($request->new_password)]);
-
         $user->tokens()->delete();
 
         return response()->json([
             'message' => $this->msg(
                 $request,
-                'تم تغيير كلمة المرور بنجاح، يرجى تسجيل الدخول مجدداً',
-                'Password changed successfully, please log in again'
+                'تم تغيير كلمة المرور بنجاح',
+                'Password changed successfully'
             )
         ]);
     }
 
-    /**
-     * POST /api/auth/logout — Protected (auth:sanctum)
-     */
-    public function logout(Request $request)
+    // GET /api/admin/users — Admin only
+    public function getUsers(Request $request)
     {
-        $request->user()->currentAccessToken()->delete();
+        if ($request->user()->role !== 'admin') {
+            return response()->json(['message' => 'غير مصرح'], 403);
+        }
 
-        return response()->json([
-            'message' => $this->msg($request, 'تم تسجيل الخروج بنجاح', 'Logged out successfully')
-        ]);
+        $users = User::select('id', 'name', 'username', 'role', 'created_at')->get();
+
+        return response()->json(['users' => $users]);
     }
 
-    /**
-     * GET /api/auth/me — Protected (auth:sanctum)
-     */
-    public function me(Request $request)
+    // POST /api/admin/users/{id}/password — Admin only
+    public function changeModeratorPassword(Request $request, $id)
     {
-        $user = $request->user();
+        // ✅ فقط الأدمن
+        if ($request->user()->role !== 'admin') {
+            return response()->json(['message' => 'هذه العملية للأدمن فقط'], 403);
+        }
 
-        return response()->json([
-            'id'       => $user->id,
-            'name'     => $user->name,
-            'username' => $user->username,
-            'is_admin' => $user->is_admin,
+        $request->validate([
+            'admin_password'          => 'required|string',
+            'new_password'            => 'required|string|min:8|max:255',
+            'new_password_confirmation' => 'required|string|same:new_password',
         ]);
+
+        // ✅ تحقق من كلمة مرور الأدمن
+        if (!Hash::check($request->admin_password, $request->user()->password)) {
+            return response()->json(['message' => 'كلمة مرور الأدمن غير صحيحة'], 401);
+        }
+
+        $moderator = User::findOrFail($id);
+
+        // ✅ لا يمكن تغيير كلمة مرور أدمن آخر
+        if ($moderator->role === 'admin') {
+            return response()->json(['message' => 'لا يمكن تغيير كلمة مرور الأدمن من هنا'], 422);
+        }
+
+        $moderator->update(['password' => Hash::make($request->new_password)]);
+        $moderator->tokens()->delete(); // ✅ أجبره على تسجيل الدخول من جديد
+
+        return response()->json(['message' => 'تم تغيير كلمة مرور المشرف بنجاح']);
+    }
+
+    // POST /api/admin/users/{id}/block — Admin only
+    public function blockModerator(Request $request, $id)
+    {
+        if ($request->user()->role !== 'admin') {
+            return response()->json(['message' => 'غير مصرح'], 403);
+        }
+
+        $moderator = User::findOrFail($id);
+
+        if ($moderator->role === 'admin') {
+            return response()->json(['message' => 'لا يمكن حظر الأدمن'], 422);
+        }
+
+        // ✅ احذف جميع tokens - يُجبره على تسجيل الدخول
+        $moderator->tokens()->delete();
+
+        return response()->json(['message' => 'تم حظر المشرف وإلغاء جميع جلساته']);
     }
 }
