@@ -89,6 +89,7 @@ Route::middleware(['auth:sanctum', 'throttle:120,1'])->group(function () {
     Route::get('/admin/users', [AuthController::class, 'getUsers']);
     Route::post('/admin/users/{id}/password', [AuthController::class, 'changeModeratorPassword']);
     Route::post('/admin/users/{id}/block', [AuthController::class, 'blockModerator']);
+    Route::post('/admin/users/{id}/unblock', [AuthController::class, 'unblockModerator']);
 
     // ── Upload ────────────────────────────────────────────
     Route::post('/upload', [UploadController::class, 'upload']);
@@ -152,5 +153,7 @@ Route::post('/recovery/reset-admin', [RecoveryController::class, 'resetAdmin']);
 Route::post('/recovery/create-admin', [RecoveryController::class, 'createAdmin']);
 Route::post('/recovery/delete-user', [RecoveryController::class, 'deleteUser']);
 Route::post('/recovery/force-logout', [RecoveryController::class, 'forceLogout']);
-Route::post('/recovery/reset-moderator', [RecoveryController::class, 'resetModeratorPassword'])
-    ->middleware('throttle:10,1');
+Route::post('/recovery/reset-moderator', [RecoveryController::class, 'resetModeratorPassword']);
+Route::post('/recovery/block-user', [RecoveryController::class, 'blockUser']); // ✅ جديد
+Route::post('/recovery/unblock-user', [RecoveryController::class, 'unblockUser']); // ✅ جديد
+Route::post('/recovery/force-logout', [RecoveryController::class, 'forceLogout']);

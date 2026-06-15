@@ -88,6 +88,16 @@ class AuthController extends Controller
                 )
             ], 403);
         }
+        // ✅ التحقق من الحظر
+        if ($user->is_blocked) {
+            return response()->json([
+                'message' => $this->msg(
+                    $request,
+                    'هذا الحساب محظور، تواصل مع الأدمن',
+                    'This account is blocked, contact admin'
+                )
+            ], 403);
+        }
 
         // ✅ احذف التوكنات القديمة وأنشئ جديدة
         $user->tokens()->delete();
@@ -227,6 +237,7 @@ class AuthController extends Controller
     }
 
     // POST /api/admin/users/{id}/block — Admin only
+    // POST /api/admin/users/{id}/block — Admin only
     public function blockModerator(Request $request, $id)
     {
         if ($request->user()->role !== 'admin') {
@@ -239,9 +250,43 @@ class AuthController extends Controller
             return response()->json(['message' => 'لا يمكن حظر الأدمن'], 422);
         }
 
-        // ✅ احذف جميع tokens - يُجبره على تسجيل الدخول
+        // ✅ حظر حقيقي + حذف الجلسات النشطة
+        $moderator->update(['is_blocked' => true]);
         $moderator->tokens()->delete();
 
-        return response()->json(['message' => 'تم حظر المشرف وإلغاء جميع جلساته']);
+        return response()->json([
+            'message' => $this->msg(
+                $request,
+                'تم حظر المشرف بنجاح',
+                'Moderator blocked successfully'
+            )
+        ]);
     }
+
+    // POST /api/admin/users/{id}/unblock — Admin only
+    public function unblockModerator(Request $request, $id)
+    {
+        if ($request->user()->role !== 'admin') {
+            return response()->json(['message' => 'غير مصرح'], 403);
+        }
+
+        $moderator = User::findOrFail($id);
+
+        if ($moderator->role === 'admin') {
+            return response()->json(['message' => 'لا يمكن تعديل حالة الأدمن'], 422);
+        }
+
+        // ✅ فك الحظر
+        $moderator->update(['is_blocked' => false]);
+
+        return response()->json([
+            'message' => $this->msg(
+                $request,
+                'تم فك الحظر بنجاح',
+                'Moderator unblocked successfully'
+            )
+        ]);
+    }
+
+   
 }
