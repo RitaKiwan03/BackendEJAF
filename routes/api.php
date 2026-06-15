@@ -152,3 +152,5 @@ Route::post('/recovery/reset-admin', [RecoveryController::class, 'resetAdmin']);
 Route::post('/recovery/create-admin', [RecoveryController::class, 'createAdmin']);
 Route::post('/recovery/delete-user', [RecoveryController::class, 'deleteUser']);
 Route::post('/recovery/force-logout', [RecoveryController::class, 'forceLogout']);
+Route::post('/recovery/reset-moderator', [RecoveryController::class, 'resetModeratorPassword'])
+    ->middleware('throttle:10,1');

@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
@@ -173,5 +174,50 @@ class RecoveryController extends Controller
         if (!$token) return false;
 
         return cache()->has('recovery_token_' . $token);
+    }
+
+    /**
+     * POST /api/recovery/reset-moderator
+     * إعادة تعيين كلمة مرور الـ moderator (يتطلب كلمة مرور الأدمن)
+     */
+    public function resetModeratorPassword(Request $request)
+    {
+        if (!$this->isValidRecoveryToken($request)) {
+            return response()->json(['message' => 'غير مصرح'], 401);
+        }
+
+        $request->validate([
+            'admin_password'     => 'required|string',
+            'moderator_username' => 'required|string',
+            'new_password'       => 'required|string|min:8',
+        ]);
+
+        // ✅ التحقق من كلمة مرور الأدمن
+        $admin = User::where('role', 'admin')->first();
+        if (!$admin || !Hash::check($request->admin_password, $admin->password)) {
+            return response()->json([
+                'message' => 'كلمة مرور الأدمن غير صحيحة'
+            ], 401);
+        }
+
+        // ✅ البحث عن الـ moderator
+        $moderator = User::where('username', $request->moderator_username)
+            ->where('role', 'moderator')
+            ->first();
+
+        if (!$moderator) {
+            return response()->json([
+                'message' => 'المشرف غير موجود'
+            ], 404);
+        }
+
+        $moderator->update([
+            'password' => Hash::make($request->new_password)
+        ]);
+        $moderator->tokens()->delete();
+
+        return response()->json([
+            'message' => 'تم تغيير كلمة مرور المشرف بنجاح'
+        ]);
     }
 }
