@@ -88,14 +88,11 @@ class AuthController extends Controller
                 )
             ], 403);
         }
+
         // ✅ التحقق من الحظر
-        if ($user->is_blocked) {
+        if (!empty($user->is_blocked)) {
             return response()->json([
-                'message' => $this->msg(
-                    $request,
-                    'هذا الحساب محظور، تواصل مع الأدمن',
-                    'This account is blocked, contact admin'
-                )
+                'message' => $this->msg($request, 'هذا الحساب محظور، تواصل مع الأدمن', 'This account is blocked, contact admin')
             ], 403);
         }
 
@@ -136,6 +133,7 @@ class AuthController extends Controller
             'username' => $user->username,
             'role'     => $user->role,
             'is_admin' => $user->role === 'admin',
+            'is_blocked' => !empty($user->is_blocked),
         ]);
     }
 
@@ -199,8 +197,7 @@ class AuthController extends Controller
             return response()->json(['message' => 'غير مصرح'], 403);
         }
 
-        $users = User::select('id', 'name', 'username', 'role', 'created_at')->get();
-
+        $users = User::select('id', 'name', 'username', 'role', 'is_admin', 'is_blocked', 'created_at')->get();
         return response()->json(['users' => $users]);
     }
 
@@ -231,6 +228,7 @@ class AuthController extends Controller
         }
 
         $moderator->update(['password' => Hash::make($request->new_password)]);
+        $moderator->update(['is_blocked' => true]);
         $moderator->tokens()->delete(); // ✅ أجبره على تسجيل الدخول من جديد
 
         return response()->json(['message' => 'تم تغيير كلمة مرور المشرف بنجاح']);
@@ -287,6 +285,4 @@ class AuthController extends Controller
             )
         ]);
     }
-
-   
 }
