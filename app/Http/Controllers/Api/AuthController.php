@@ -14,9 +14,17 @@ class AuthController extends Controller
     private const CAPTCHA_TTL_MINUTES = 5;
 
     /**
+     * ✅ يرجع الرسالة المناسبة حسب لغة الطلب (Accept-Language header)
+     * الافتراضي عربي إذا لم يُرسَل الـ header أو كانت قيمته غير en
+     */
+    private function msg(Request $request, string $ar, string $en): string
+    {
+        $lang = strtolower((string) $request->header('Accept-Language', 'ar'));
+        return str_starts_with($lang, 'en') ? $en : $ar;
+    }
+
+    /**
      * GET /api/auth/captcha — Public
-     * ✅ يولّد سؤال CAPTCHA على السيرفر ويخزن الإجابة في Cache
-     *    (الإجابة الصحيحة لا تُرسَل للمتصفح أبداً)
      */
     public function captcha(Request $request)
     {
@@ -34,7 +42,6 @@ class AuthController extends Controller
 
         $id = (string) Str::uuid();
 
-        // ✅ تُحفظ الإجابة 5 دقائق فقط ويُستخدم المعرّف مرة واحدة
         Cache::put("captcha:{$id}", $answer, now()->addMinutes(self::CAPTCHA_TTL_MINUTES));
 
         return response()->json([
@@ -45,7 +52,6 @@ class AuthController extends Controller
 
     /**
      * POST /api/auth/login — Public
-     * تسجيل الدخول للأدمن فقط — مع تحقق CAPTCHA من السيرفر
      */
     public function login(Request $request)
     {
@@ -56,31 +62,40 @@ class AuthController extends Controller
             'captcha_answer' => 'required|numeric',
         ]);
 
-        // ✅ التحقق من CAPTCHA على السيرفر — Cache::pull يحذفها فوراً (one-time use)
         $expected = Cache::pull("captcha:{$request->captcha_id}");
 
         if ($expected === null || (int) $request->captcha_answer !== (int) $expected) {
             return response()->json([
-                'message' => 'فشل التحقق الأمني، حاول مرة أخرى'
+                'message' => $this->msg(
+                    $request,
+                    'فشل التحقق الأمني، حاول مرة أخرى',
+                    'Security verification failed, please try again'
+                )
             ], 422);
         }
 
         $user = User::where('username', $request->username)->first();
 
-        // ✅ رسالة موحدة لمنع تخمين اسم المستخدم
         if (!$user || !Hash::check($request->password, $user->password)) {
             return response()->json([
-                'message' => 'بيانات الدخول غير صحيحة'
+                'message' => $this->msg(
+                    $request,
+                    'بيانات الدخول غير صحيحة',
+                    'Invalid login credentials'
+                )
             ], 401);
         }
 
         if (!$user->is_admin) {
             return response()->json([
-                'message' => 'غير مصرح لك بالدخول'
+                'message' => $this->msg(
+                    $request,
+                    'غير مصرح لك بالدخول',
+                    'You are not authorized to access this area'
+                )
             ], 403);
         }
 
-        // ✅ حذف التوكنات القديمة قبل إنشاء توكن جديد (منع تراكم التوكنات)
         $user->tokens()->delete();
 
         $token = $user->createToken('admin-token')->plainTextToken;
@@ -98,7 +113,6 @@ class AuthController extends Controller
 
     /**
      * POST /api/auth/change-password — Protected (auth:sanctum)
-     * تغيير كلمة المرور للأدمن
      */
     public function changePassword(Request $request)
     {
@@ -111,23 +125,34 @@ class AuthController extends Controller
 
         if (!Hash::check($request->current_password, $user->password)) {
             return response()->json([
-                'message' => 'كلمة المرور الحالية غير صحيحة'
+                'message' => $this->msg(
+                    $request,
+                    'كلمة المرور الحالية غير صحيحة',
+                    'Current password is incorrect'
+                )
             ], 401);
         }
 
         if (Hash::check($request->new_password, $user->password)) {
             return response()->json([
-                'message' => 'كلمة المرور الجديدة يجب أن تكون مختلفة عن الحالية'
+                'message' => $this->msg(
+                    $request,
+                    'كلمة المرور الجديدة يجب أن تكون مختلفة عن الحالية',
+                    'New password must be different from the current one'
+                )
             ], 422);
         }
 
         $user->update(['password' => Hash::make($request->new_password)]);
 
-        // ✅ إلغاء جميع التوكنات بعد تغيير الباسورد (إجبار على إعادة الدخول)
         $user->tokens()->delete();
 
         return response()->json([
-            'message' => 'تم تغيير كلمة المرور بنجاح، يرجى تسجيل الدخول مجدداً'
+            'message' => $this->msg(
+                $request,
+                'تم تغيير كلمة المرور بنجاح، يرجى تسجيل الدخول مجدداً',
+                'Password changed successfully, please log in again'
+            )
         ]);
     }
 
@@ -138,7 +163,9 @@ class AuthController extends Controller
     {
         $request->user()->currentAccessToken()->delete();
 
-        return response()->json(['message' => 'تم تسجيل الخروج بنجاح']);
+        return response()->json([
+            'message' => $this->msg($request, 'تم تسجيل الخروج بنجاح', 'Logged out successfully')
+        ]);
     }
 
     /**
