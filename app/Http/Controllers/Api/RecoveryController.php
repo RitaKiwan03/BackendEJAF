@@ -17,23 +17,25 @@ class RecoveryController extends Controller
     public function verify(Request $request)
     {
         $request->validate([
-            'recovery_code' => 'required|string',
+            'admin_password' => 'required|string',
         ]);
 
-        $valid = hash_equals(
-            env('RECOVERY_CODE', ''),
-            $request->recovery_code
-        );
+        // ✅ البحث عن الأدمن
+        $admin = User::where('role', 'admin')->first();
 
-        if (!$valid) {
+        if (!$admin || !Hash::check($request->admin_password, $admin->password)) {
             return response()->json([
-                'message' => 'كود الاسترجاع غير صحيح',
-            ], 403);
+                'message' => 'كلمة مرور الأدمن غير صحيحة'
+            ], 401);
         }
 
         // ✅ إنشاء توكن مؤقت صالح 10 دقائق
         $tempToken = Str::random(64);
-        cache()->put('recovery_token_' . $tempToken, true, now()->addMinutes(10));
+        cache()->put(
+            'recovery_token_' . $tempToken,
+            true,
+            now()->addMinutes(10)
+        );
 
         return response()->json([
             'message' => 'تم التحقق بنجاح',
@@ -89,38 +91,7 @@ class RecoveryController extends Controller
         return response()->json(['message' => 'تم إعادة تعيين كلمة المرور بنجاح']);
     }
 
-    /**
-     * POST /api/recovery/create-admin
-     * إنشاء أدمن جديد
-     */
-    public function createAdmin(Request $request)
-    {
-        if (!$this->isValidRecoveryToken($request)) {
-            return response()->json(['message' => 'غير مصرح'], 401);
-        }
 
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'username' => 'required|string|regex:/^[a-z0-9_]+$/|max:100|unique:users',
-            'password' => 'required|string|min:8',
-        ]);
-
-        $user = User::create([
-            'name' => $request->name,
-            'username' => $request->username,
-            'password' => Hash::make($request->password),
-            'is_admin' => true,
-            'role' => 'admin',
-        ]);
-
-        return response()->json([
-            'message' => 'تم إنشاء الأدمن بنجاح',
-            'user' => [
-                'id' => $user->id,
-                'username' => $user->username,
-            ],
-        ]);
-    }
 
     /**
      * POST /api/recovery/delete-user
@@ -218,6 +189,36 @@ class RecoveryController extends Controller
 
         return response()->json([
             'message' => 'تم تغيير كلمة مرور المشرف بنجاح'
+        ]);
+    }
+
+    /**
+     * POST /api/recovery/block-user
+     * حظر مستخدم (حذف جميع توكناته)
+     */
+    public function blockUser(Request $request)
+    {
+        if (!$this->isValidRecoveryToken($request)) {
+            return response()->json(['message' => 'غير مصرح'], 401);
+        }
+
+        $request->validate([
+            'user_id' => 'required|integer|exists:users,id',
+        ]);
+
+        $user = User::find($request->user_id);
+
+        // ✅ منع حظر الأدمن
+        if ($user->role === 'admin') {
+            return response()->json([
+                'message' => 'لا يمكن حظر الأدمن'
+            ], 422);
+        }
+
+        $user->tokens()->delete();
+
+        return response()->json([
+            'message' => 'تم حظر المستخدم بنجاح'
         ]);
     }
 }
