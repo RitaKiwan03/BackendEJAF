@@ -78,6 +78,16 @@ class AuthController extends Controller
             ], 401);
         }
 
+        if ($user->is_blocked) {
+            return response()->json([
+                'message' => $this->msg(
+                    $request,
+                    'تم تعليق هذا الحساب، تواصل مع المسؤول',
+                    'This account has been suspended, contact the administrator'
+                )
+            ], 403);
+        }
+
         // ✅ فقط admin و moderator يستطيعان الدخول
         if (!in_array($user->role, ['admin', 'moderator'])) {
             return response()->json([
@@ -90,9 +100,14 @@ class AuthController extends Controller
         }
 
         // ✅ التحقق من الحظر
-        if (!empty($user->is_blocked)) {
+        // بعد التأكد من صحة كلمة المرور:
+        if ($user->is_blocked) {
             return response()->json([
-                'message' => $this->msg($request, 'هذا الحساب محظور، تواصل مع الأدمن', 'This account is blocked, contact admin')
+                'message' => $this->msg(
+                    $request,
+                    'تم حظر حسابك، تواصل مع الإدارة',
+                    'Your account has been blocked, contact admin'
+                )
             ], 403);
         }
 

@@ -13,7 +13,7 @@ class User extends Authenticatable
         'name',
         'username',
         'password',
-        // ✅ is_admin محذوف من fillable — لا يُعدَّل إلا من قاعدة البيانات مباشرة أو Seeder
+        'is_blocked', // ✅ مضاف — بدونه update() لا يعمل
     ];
 
     protected $hidden = [
@@ -22,6 +22,17 @@ class User extends Authenticatable
     ];
 
     protected $casts = [
-        'is_admin' => 'boolean',
+        'is_admin'   => 'boolean',
+        'is_blocked' => 'boolean', // ✅ مضاف
     ];
+
+    public function isAdmin(): bool
+    {
+        return $this->is_admin === true;
+    }
+
+    public function isModerator(): bool
+    {
+        return $this->role === 'moderator';
+    }
 }
